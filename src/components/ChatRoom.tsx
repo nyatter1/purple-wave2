@@ -30,6 +30,7 @@ import PollModal from "./PollModal";
 import GiftModal from "./GiftModal";
 import DiceModal from "./DiceModal";
 import PrivateMessageSystem from "./PrivateMessageSystem";
+import NotificationsModal from "./NotificationsModal";
 import { updateCurrentlyPlaying } from "../lib/spotify";
 
 const getAssetUrl = (path: string) => {
@@ -460,7 +461,7 @@ export default function ChatRoom({ user, onLogout, onUpdateUser }: ChatRoomProps
 
   const playNotifySound = () => {
     if (!soundsEnabled) return;
-    playSynthSound('notify');
+    playAudio('/notify.mp3');
   };
 
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -565,7 +566,7 @@ export default function ChatRoom({ user, onLogout, onUpdateUser }: ChatRoomProps
     if (lower.includes('clear')) filename = "clear.mp3";
     else if (lower.includes('username') || lower.includes('tag')) filename = "username.mp3";
     else if (lower.includes('private') || lower.includes('pm')) filename = "private.mp3";
-    else if (lower.includes('message') || lower.includes('msg')) filename = "new_message.mp3";
+    else if (lower.includes('message') || lower.includes('msg')) filename = "message.mp3";
     else if (lower.includes('action') || lower.includes('ban') || lower.includes('kick') || lower.includes('mute') || lower.includes('username_change')) filename = "action.mp3";
     else if (lower.includes('notify') || lower.includes('notif')) filename = "notify.mp3";
     else if (lower.includes('news')) filename = "new_news.mp3";
@@ -660,6 +661,7 @@ export default function ChatRoom({ user, onLogout, onUpdateUser }: ChatRoomProps
         if (newMsg.text?.startsWith('[SYSTEM] Chat cleared by') || newMsg.text?.startsWith('[SYSTEM] Chat cleared:')) {
            playAudio('/clear.mp3');
            setMessages([]);
+           return;
         } else if (newMsg.text?.startsWith('[USERNAME_CHANGE] ')) {
            playAudio('/action.mp3');
         } else if (newMsg.text?.startsWith('[SYSTEM] ') && (
@@ -675,7 +677,7 @@ export default function ChatRoom({ user, onLogout, onUpdateUser }: ChatRoomProps
            if (newMsg.text && newMsg.text.toLowerCase().includes(`@${user.username.toLowerCase()}`)) {
               playAudio('/username.mp3');
            } else {
-              playAudio('/new_message.mp3');
+              playAudio('/message.mp3');
            }
         }
         
@@ -917,7 +919,9 @@ export default function ChatRoom({ user, onLogout, onUpdateUser }: ChatRoomProps
       .limit(50);
 
     if (data) {
-      const formatted = data.map((m: any) => {
+      const formatted = data
+        .filter((m: any) => !(typeof m.text === 'string' && (m.text.startsWith('[SYSTEM] Chat cleared by') || m.text.startsWith('[SYSTEM] Chat cleared:'))))
+        .map((m: any) => {
         const isSystem = typeof m.text === 'string' && m.text.startsWith('[SYSTEM]');
         return {
           id: m.id,
@@ -979,8 +983,8 @@ export default function ChatRoom({ user, onLogout, onUpdateUser }: ChatRoomProps
     };
 
     setMessages(prev => {
-      if (typeof rawText === 'string' && rawText.startsWith('[SYSTEM] Chat cleared by')) {
-        return [formattedMsg];
+      if (typeof rawText === 'string' && (rawText.startsWith('[SYSTEM] Chat cleared by') || rawText.startsWith('[SYSTEM] Chat cleared:'))) {
+        return [];
       }
       const next = [
         ...prev.filter(m => 
@@ -1518,7 +1522,7 @@ export default function ChatRoom({ user, onLogout, onUpdateUser }: ChatRoomProps
       const parts = text.split(' ').filter(Boolean);
       const cmd = parts[0].toLowerCase();
       
-      const knownCommands = ['/commands', '/clear', '/allin', '/dice'];
+      const knownCommands = ['/commands', '/clear', '/allin', '/dice', '/announcement', '/annoucement', '/notify'];
       if (!knownCommands.includes(cmd)) {
         addLocalSystemMessage(`Unknown command "${cmd}". Type /commands to see all available commands.`);
         return;
@@ -1530,8 +1534,77 @@ export default function ChatRoom({ user, onLogout, onUpdateUser }: ChatRoomProps
           `• /commands - Show this help list (only visible to you).\n` +
           `• /clear - Clear your chat screen locally.\n` +
           `• /allin [gold/rubies] - Bet ALL your Gold or Rubies for a multiplier up to x1000!\n` +
-          `• /dice [gold/rubies] [amount] - Roll 1-6. Lands on 6 wins up to x1000 multiplier!`
+          `• /dice [gold/rubies] [amount] - Roll 1-6. Lands on 6 wins up to x1000 multiplier!\n` +
+          `• /announcement set [announcement] - (Dev) Set global announcement.\n` +
+          `• /announcement remove - (Dev) Remove global announcement.\n` +
+          `• /notify [message] - (Dev) Send everyone a notification.`
         );
+        return;
+      }
+
+      if (cmd === '/announcement' || cmd === '/annoucement') {
+        const isDevEmail = ['dev@gmail.com', 'haydensixseven@gmail.com', 'haydensixsevennn@gmail.com', 'test@gmail.com'].includes(user.email || '');
+        if (!isDevEmail) {
+          addLocalSystemMessage("You do not have permission to run this command. (Developer only)");
+          return;
+        }
+
+        const action = (parts[1] || '').toLowerCase();
+        if (action === 'set') {
+          const announcementContent = parts.slice(2).join(' ');
+          if (!announcementContent.trim()) {
+            addLocalSystemMessage("Usage: /announcement set [announcement text]");
+            return;
+          }
+
+          try {
+            await supabase.from('announcements').insert({
+              profile_id: user.id,
+              text: announcementContent,
+            });
+            addLocalSystemMessage("📢 Global announcement has been successfully created!");
+          } catch (err: any) {
+            addLocalSystemMessage(`❌ Error creating announcement: ${err.message}`);
+          }
+        } else if (action === 'remove') {
+          try {
+            await supabase.from('announcements').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+            addLocalSystemMessage("📢 All global announcements have been successfully removed!");
+          } catch (err: any) {
+            addLocalSystemMessage(`❌ Error removing announcements: ${err.message}`);
+          }
+        } else {
+          addLocalSystemMessage("Usage: /announcement set [text]  OR  /announcement remove");
+        }
+        return;
+      }
+
+      if (cmd === '/notify') {
+        const isDevEmail = ['dev@gmail.com', 'haydensixseven@gmail.com', 'haydensixsevennn@gmail.com', 'test@gmail.com'].includes(user.email || '');
+        if (!isDevEmail) {
+          addLocalSystemMessage("You do not have permission to run this command. (Developer only)");
+          return;
+        }
+
+        const notificationContent = parts.slice(1).join(' ');
+        if (!notificationContent.trim()) {
+          addLocalSystemMessage("Usage: /notify [notification message]");
+          return;
+        }
+
+        try {
+          await supabase.from('notifications').insert({
+            target_id: null,
+            sender_id: user.id,
+            sender_username: user.username,
+            sender_pfp: user.pfp,
+            sender_rank: user.rank,
+            message: notificationContent
+          });
+          addLocalSystemMessage("🔔 Global notification has been successfully broadcasted!");
+        } catch (err: any) {
+          addLocalSystemMessage(`❌ Error sending notification: ${err.message}`);
+        }
         return;
       }
 
@@ -1545,7 +1618,7 @@ export default function ChatRoom({ user, onLogout, onUpdateUser }: ChatRoomProps
           // Clear on database background
           (async () => {
             try {
-              await supabase.from('messages').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+              // 1. First insert the trigger system message so other clients get notified in real-time
               await supabase.from('messages').insert([
                 {
                   profile_id: user.id,
@@ -1553,6 +1626,15 @@ export default function ChatRoom({ user, onLogout, onUpdateUser }: ChatRoomProps
                   room: 'main'
                 }
               ]);
+              
+              // 2. Wait 2.5 seconds to make sure everyone received the event, then delete everything
+              setTimeout(async () => {
+                try {
+                  await supabase.from('messages').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+                } catch (e) {
+                  console.error("Failed to delete all messages after clear:", e);
+                }
+              }, 2500);
             } catch (err) {
               console.error("Failed to clear chat on database:", err);
             }
@@ -2913,31 +2995,7 @@ export default function ChatRoom({ user, onLogout, onUpdateUser }: ChatRoomProps
               )}
             </div>
 
-            {/* Admin Panel Button (restricted to Founder and above or Devs) */}
-            {(() => {
-              const isDevEmail = ['dev@gmail.com', 'haydensixseven@gmail.com', 'haydensixsevennn@gmail.com', 'test@gmail.com'].includes(user.email || '');
-              const userPriority = allRanksInfo[user.rank]?.priority ?? 14;
-              const hasAdminAccess = isDevEmail || userPriority <= 2;
-
-              if (!hasAdminAccess) return null;
-
-              return (
-                <button 
-                  onClick={async () => {
-                    setShowAdminModal(true);
-                    await fetchAllProfiles();
-                  }}
-                  className={`p-1.5 rounded-lg transition-all cursor-pointer ${
-                    showAdminModal 
-                      ? "text-rose-400 bg-rose-950/30 border border-rose-500/20" 
-                      : "text-rose-400 hover:text-rose-300 hover:bg-rose-950/20"
-                  }`}
-                  title="Admin Control Panel"
-                >
-                  <ShieldCheck className="w-5 h-5" />
-                </button>
-              );
-            })()}
+            {/* Admin Panel Button removed as per developer commands migration */}
 
             <button 
               onClick={() => {
@@ -3596,6 +3654,9 @@ export default function ChatRoom({ user, onLogout, onUpdateUser }: ChatRoomProps
                   const knownCommandsList = [
                     { cmd: '/commands', desc: 'Show available commands list', badge: 'Help' },
                     { cmd: '/clear', desc: 'Clear all messages globally', badge: 'Founder+' },
+                    { cmd: '/announcement set', desc: 'Set global announcement', badge: 'Dev' },
+                    { cmd: '/announcement remove', desc: 'Remove global announcement', badge: 'Dev' },
+                    { cmd: '/notify', desc: 'Send global notification', badge: 'Dev' },
                     { cmd: '/allin', desc: 'Bet all your Gold or Rubies', badge: 'Gamble' },
                     { cmd: '/dice', desc: 'Roll a 1-6 dice to win multiplier', badge: 'Gamble' }
                   ];
@@ -3612,7 +3673,9 @@ export default function ChatRoom({ user, onLogout, onUpdateUser }: ChatRoomProps
                         {matchingCommands.map((c) => {
                           const userPriority = allRanksInfo[user.rank]?.priority ?? 14;
                           const isFounderOrAbove = userPriority <= 2;
-                          const isDisabled = c.cmd === '/clear' && !isFounderOrAbove;
+                          const isDev = ['dev@gmail.com', 'haydensixseven@gmail.com', 'haydensixsevennn@gmail.com', 'test@gmail.com'].includes(user.email || '');
+                          const isDisabled = (c.cmd === '/clear' && !isFounderOrAbove) || 
+                                             ((c.cmd.startsWith('/announcement') || c.cmd.startsWith('/notify')) && !isDev);
                           return (
                             <button
                               key={c.cmd}
@@ -3637,7 +3700,11 @@ export default function ChatRoom({ user, onLogout, onUpdateUser }: ChatRoomProps
                                   ? isFounderOrAbove
                                     ? "bg-amber-500/20 text-amber-300"
                                     : "bg-red-500/20 text-red-300"
-                                  : "bg-violet-500/20 text-violet-300"
+                                  : c.badge === 'Dev'
+                                    ? isDev
+                                      ? "bg-rose-500/20 text-rose-300 border border-rose-500/10"
+                                      : "bg-red-500/25 text-red-400"
+                                    : "bg-violet-500/20 text-violet-300"
                               }`}>
                                 {c.badge}
                               </span>
@@ -4535,6 +4602,16 @@ export default function ChatRoom({ user, onLogout, onUpdateUser }: ChatRoomProps
       )}
 
       {/* Reveal Decision Modal */}
+      {showNotificationsModal && (
+        <NotificationsModal
+          user={user}
+          notifications={notifications}
+          onClose={() => setShowNotificationsModal(false)}
+          onClearAll={() => setNotifications([])}
+          onOpenDecision={(notif) => setActiveDecisionNotif(notif)}
+        />
+      )}
+
       {activeDecisionNotif && (
         <RevealDecisionModal
           user={user}
