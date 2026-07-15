@@ -491,7 +491,6 @@ export const VitroModal: React.FC<VitroModalProps> = ({ isOpen, onClose, user, o
               <div className="text-center mt-5 space-y-1 relative z-10">
                 <h4 className="text-base font-black text-white leading-tight flex items-center justify-center gap-1">
                   {user.username}
-                  {user.nameplate && <img src={user.nameplate} alt="Nameplate" className="h-4 object-contain shrink-0" referrerPolicy="no-referrer" />}
                 </h4>
                 <p className="text-[10px] text-pink-400 font-bold tracking-wider uppercase">Vitro Preview</p>
                 

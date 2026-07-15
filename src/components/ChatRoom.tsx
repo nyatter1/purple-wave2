@@ -3370,11 +3370,24 @@ export default function ChatRoom({ user, onLogout, onUpdateUser }: ChatRoomProps
                   return (
                     <div 
                       key={msg.id} 
-                      className={`group flex gap-3.5 px-4 py-3.5 border-b border-white/5 relative ${msg.isSystem ? "bg-transparent" : index % 2 === 0 ? "bg-slate-900/15" : "bg-transparent"}`}
+                      className={`group flex gap-3.5 px-4 py-3.5 border-b border-white/5 relative overflow-hidden ${msg.isSystem ? "bg-transparent" : index % 2 === 0 ? "bg-slate-900/15" : "bg-transparent"}`}
                     >
+                      {msg.nameplate && !msg.isSystem && (
+                        <div className="absolute inset-0 z-0 opacity-40 pointer-events-none">
+                          <video
+                            src={msg.nameplate}
+                            autoPlay
+                            loop
+                            muted
+                            playsInline
+                            className="w-full h-full object-cover"
+                          />
+                          <div className="absolute inset-0 bg-slate-950/20" />
+                        </div>
+                      )}
                       {!msg.isSystem && (
                         <div 
-                          className="cursor-pointer transition-transform hover:scale-105"
+                          className="cursor-pointer transition-transform hover:scale-105 relative z-10"
                           onClick={() => {
                             const foundUser = computedUsers.find(u => (msg.profile_id && u.id === msg.profile_id) || u.username === msg.username);
                             if (foundUser) handleProfileClick(foundUser);
@@ -3389,7 +3402,7 @@ export default function ChatRoom({ user, onLogout, onUpdateUser }: ChatRoomProps
                           />
                         </div>
                       )}
-                      <div className={`flex-1 min-w-0 flex flex-col justify-center ${(msg.isSystem && !(msg.text && (msg.text.includes("Chat cleared by") || msg.text.includes("cleared by")))) ? "items-center py-2" : ""}`}>
+                      <div className={`flex-1 min-w-0 flex flex-col justify-center relative z-10 ${(msg.isSystem && !(msg.text && (msg.text.includes("Chat cleared by") || msg.text.includes("cleared by")))) ? "items-center py-2" : ""}`}>
                         {msg.isSystem ? (
                           (msg.text && (msg.text.includes("Chat cleared by") || msg.text.includes("cleared by"))) ? (
                             <div className="flex items-center gap-3 py-1 text-sm text-[#8c88a5] font-medium animate-in fade-in duration-200">
@@ -3452,14 +3465,6 @@ export default function ChatRoom({ user, onLogout, onUpdateUser }: ChatRoomProps
                               >
                                 {msg.username}
                               </span>
-                              {msg.nameplate && (
-                                <img
-                                  src={msg.nameplate}
-                                  alt="Nameplate"
-                                  className="h-4 object-contain shrink-0 ml-1"
-                                  referrerPolicy="no-referrer"
-                                />
-                              )}
                               <span className="text-[10px] text-slate-500 font-medium ml-1 shrink-0">{msg.time}</span>
                             </div>
                             {msg.text?.startsWith('[POLL]:') ? (
@@ -3486,7 +3491,7 @@ export default function ChatRoom({ user, onLogout, onUpdateUser }: ChatRoomProps
                       </div>
                       
                       {!msg.isSystem && (
-                        <div className="absolute right-4 top-4 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div className="absolute right-4 top-4 opacity-0 group-hover:opacity-100 transition-opacity z-10">
                           <div className="relative">
                             <button
                               onClick={() => setActiveMessageMenu(activeMessageMenu === msg.id ? null : msg.id)}
