@@ -4,7 +4,7 @@ import {
   Crown, ShieldAlert as RulesIcon, ChevronLeft, ChevronRight, LogOut, Shield,
   MoreHorizontal, EyeOff, Trash2, Reply, Volume2, VolumeX,
   Bell, Mail, ShieldCheck, Sparkles, AlertTriangle, Eye, Check, Heart, Edit2, Camera,
-  Palette, CreditCard, Star, Lock, Unlock, Coins, Hand, Type, Newspaper,
+  Palette, CreditCard, Star, Lock, Unlock, Coins, Hand, Type, Newspaper, Layers,
   Vote, Gift, ArrowRightLeft, Dices, UserCog, Info, Ban, UserPlus, MessageSquare, Search, User
 } from "lucide-react";
 import { UserProfile, Message, OnlineUser, RANKS_INFO, mapDbRankToUserRank, UserRank, getLevelFromXp, Story, PrivateMessage } from "../types";
@@ -239,7 +239,7 @@ export default function ChatRoom({ user, onLogout, onUpdateUser }: ChatRoomProps
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isOnlinePanelOpen, setIsOnlinePanelOpen] = useState(window.innerWidth > 768);
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
-  const [profileMenuView, setProfileMenuView] = useState<'default' | 'status' | 'wallet'>('default');
+  const [profileMenuView, setProfileMenuView] = useState<'default' | 'status' | 'wallet' | 'level'>('default');
   const [showChatBgModal, setShowChatBgModal] = useState(false);
   const [tempBgBase64, setTempBgBase64] = useState<string | null>(null);
   const [tempBgFile, setTempBgFile] = useState<File | null>(null);
@@ -700,6 +700,7 @@ export default function ChatRoom({ user, onLogout, onUpdateUser }: ChatRoomProps
         if (newMsg.text?.startsWith('[SYSTEM] Chat cleared by') || newMsg.text?.startsWith('[SYSTEM] Chat cleared:')) {
            playAudio('/clear.mp3');
            setMessages([]);
+           fetchMessageAuthor(newMsg);
            return;
         } else if (newMsg.text?.startsWith('[USERNAME_CHANGE] ')) {
            playAudio('/action.mp3');
@@ -1023,7 +1024,7 @@ export default function ChatRoom({ user, onLogout, onUpdateUser }: ChatRoomProps
 
     setMessages(prev => {
       if (typeof rawText === 'string' && (rawText.startsWith('[SYSTEM] Chat cleared by') || rawText.startsWith('[SYSTEM] Chat cleared:'))) {
-        return [];
+        return [formattedMsg];
       }
       const next = [
         ...prev.filter(m => 
@@ -1505,15 +1506,30 @@ export default function ChatRoom({ user, onLogout, onUpdateUser }: ChatRoomProps
       monthly_xp: newMonthlyXp
     };
 
-    onUpdateUser(updates);
-
-    await supabase.from('profiles').update(updates).eq('id', user.id);
-
     if (newLevel > oldLevel) {
+      const currentCoins = user.coins ?? 1000;
+      const currentRubies = user.rubies ?? 10;
+      const bonusCoins = 200;
+      const bonusRubies = 10;
+
+      updates.coins = currentCoins + bonusCoins;
+      updates.rubies = currentRubies + bonusRubies;
+
+      onUpdateUser(updates);
+      await supabase.from('profiles').update(updates).eq('id', user.id);
+
       await supabase.from('notifications').insert({
         target_id: user.id,
-        message: "You leveled up!"
+        message: `You leveled up to Level ${newLevel}! Received ${bonusCoins} Gold and ${bonusRubies} Rubies!`
       });
+
+      addLocalSystemMessage(`🎉 LEVEL UP! You reached Level ${newLevel} and received ${bonusCoins} Gold & ${bonusRubies} Rubies!`);
+      if (soundsEnabled) {
+        playAudio('/level_up.mp3');
+      }
+    } else {
+      onUpdateUser(updates);
+      await supabase.from('profiles').update(updates).eq('id', user.id);
     }
   };
 
@@ -1530,6 +1546,51 @@ export default function ChatRoom({ user, onLogout, onUpdateUser }: ChatRoomProps
     };
     setMessages(prev => [...prev, localMsg]);
   };
+
+  const activeUserRef = useRef(user);
+
+  useEffect(() => {
+    activeUserRef.current = user;
+  }, [user]);
+
+  const [sessionMessageCount, setSessionMessageCount] = useState(0);
+
+  const incrementMessageCount = () => {
+    setSessionMessageCount(prev => {
+      const next = prev + 1;
+      if (next % 50 === 0) {
+        (async () => {
+          const currentRubies = activeUserRef.current?.rubies ?? 10;
+          const nextRubies = currentRubies + 5;
+          onUpdateUserRef.current({ rubies: nextRubies });
+          await supabase.from('profiles').update({ rubies: nextRubies }).eq('id', user.id);
+          addLocalSystemMessage("💎 Multi-message reward: You received 5 Rubies for sending 50 messages!");
+          if (soundsEnabled) {
+            playAudio('/action.mp3');
+          }
+        })();
+      }
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      const currentU = activeUserRef.current;
+      if (currentU && currentU.id) {
+        const currentCoins = currentU.coins ?? 1000;
+        const nextCoins = currentCoins + 100;
+        onUpdateUserRef.current({ coins: nextCoins });
+        await supabase.from('profiles').update({ coins: nextCoins }).eq('id', currentU.id);
+        addLocalSystemMessage("🪙 Active reward: You received 100 Gold for being active!");
+        if (soundsEnabled) {
+          playAudio('/action.mp3');
+        }
+      }
+    }, 300000); // 5 minutes
+
+    return () => clearInterval(interval);
+  }, [soundsEnabled]);
 
   const handleSendMessage = async (e: FormEvent) => {
     e.preventDefault();
@@ -1561,8 +1622,12 @@ export default function ChatRoom({ user, onLogout, onUpdateUser }: ChatRoomProps
       const parts = text.split(' ').filter(Boolean);
       const cmd = parts[0].toLowerCase();
       
-      const knownCommands = ['/commands', '/clear', '/allin', '/dice', '/announcement', '/annoucement', '/notify'];
+      const knownCommands = ['/commands', '/clear', '/announcement', '/annoucement', '/notify'];
       if (!knownCommands.includes(cmd)) {
+        if (cmd === '/allin' || cmd === '/dice') {
+          addLocalSystemMessage("🎰 Gambling commands are temporarily disabled.");
+          return;
+        }
         addLocalSystemMessage(`Unknown command "${cmd}". Type /commands to see all available commands.`);
         return;
       }
@@ -1572,8 +1637,6 @@ export default function ChatRoom({ user, onLogout, onUpdateUser }: ChatRoomProps
           `📜 Chat Commands List:\n` +
           `• /commands - Show this help list (only visible to you).\n` +
           `• /clear - Clear your chat screen locally.\n` +
-          `• /allin [gold/rubies] - Bet ALL your Gold or Rubies for a multiplier up to x1000!\n` +
-          `• /dice [gold/rubies] [amount] - Roll 1-6. Lands on 6 wins up to x1000 multiplier!\n` +
           `• /announcement set [announcement] - (Dev) Set global announcement.\n` +
           `• /announcement remove - (Dev) Remove global announcement.\n` +
           `• /notify [message] - (Dev) Send everyone a notification.`
@@ -1858,6 +1921,7 @@ export default function ChatRoom({ user, onLogout, onUpdateUser }: ChatRoomProps
     });
     if (!error) {
       await incrementXp();
+      incrementMessageCount();
     }
   };
 
@@ -1896,6 +1960,7 @@ export default function ChatRoom({ user, onLogout, onUpdateUser }: ChatRoomProps
       
       if (!error) {
         await incrementXp();
+        incrementMessageCount();
       }
     } catch (err) {
       console.error("Failed to upload image:", err);
@@ -3060,83 +3125,112 @@ export default function ChatRoom({ user, onLogout, onUpdateUser }: ChatRoomProps
               {isProfileMenuOpen && (
                 <>
                   <div className="fixed inset-0 z-40 cursor-default" onClick={() => setIsProfileMenuOpen(false)} />
-                  <div className="absolute right-0 mt-2 w-48 bg-[#0a0f1d] border border-white/10 rounded-xl shadow-2xl overflow-hidden py-1.5 z-50 animate-in fade-in slide-in-from-top-1 duration-100 text-left">
+                  <div className="absolute right-0 mt-2 w-80 bg-[#13131b] border border-white/[0.08] rounded-2xl shadow-2xl overflow-hidden p-5 z-50 animate-in fade-in slide-in-from-top-1 duration-100 text-left">
                     {profileMenuView === 'default' && (
                       <>
-                        <div className="px-3.5 py-2 border-b border-white/5">
-                          <p className="text-[10px] uppercase tracking-wider text-slate-400">Signed in as</p>
-                          <p className="text-xs font-bold text-white truncate">{user.username}</p>
+                        {/* Header card area */}
+                        <div className="flex items-center gap-4 border-b border-white/[0.08] pb-4 mb-4">
+                          <div className="relative shrink-0">
+                            <img
+                              src={user.pfp || "https://musicvibe.io/default_images/pfp/default.png"}
+                              alt={user.username}
+                              className="w-14 h-14 rounded-xl object-cover border border-white/10 bg-slate-800"
+                            />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5 mb-0.5">
+                              {RANKS_INFO[user.rank]?.icon && (
+                                <img src={RANKS_INFO[user.rank].icon} alt="" className="w-4 h-4 object-contain shrink-0" />
+                              )}
+                              <span className="text-[10px] font-bold tracking-wider text-slate-300 uppercase truncate">
+                                {RANKS_INFO[user.rank]?.name || user.rank}
+                              </span>
+                            </div>
+                            <h4 className="text-base font-black text-white truncate leading-none">
+                              {user.username}
+                            </h4>
+                          </div>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setProfileMenuView('status');
+                            }}
+                            className="shrink-0 hover:scale-105 active:scale-95 transition-all bg-[#1c1c28] hover:bg-[#252538] border border-white/5 p-2 rounded-xl flex items-center justify-center cursor-pointer"
+                            title="Change Status"
+                          >
+                            {renderStatusBadge(user.custom_status || 'online', "w-6 h-6")}
+                          </button>
                         </div>
-                        
-                        {/* Status Select Option */}
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setProfileMenuView('status');
-                          }}
-                          className="w-full text-left px-3.5 py-2.5 text-xs text-slate-200 hover:bg-slate-800/40 hover:text-white transition-colors flex items-center justify-between cursor-pointer"
-                        >
-                          <div className="flex items-center gap-2">
-                            {renderStatusBadge(user.custom_status || 'online', "w-3.5 h-3.5")}
-                            <span>Status</span>
-                          </div>
-                          <span className="text-[10px] text-slate-400 capitalize">{user.custom_status || 'online'}</span>
-                        </button>
 
-                        {/* Edit Profile Option */}
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setIsProfileMenuOpen(false);
-                            handleProfileClick(user, "edit");
-                          }}
-                          className="w-full text-left px-3.5 py-2.5 text-xs text-slate-200 hover:bg-slate-800/40 hover:text-white transition-colors flex items-center gap-2 cursor-pointer"
-                        >
-                          <Edit2 className="w-3.5 h-3.5 text-slate-400" />
-                          <span>Edit Profile</span>
-                        </button>
+                        {/* List Options */}
+                        <div className="space-y-1.5">
+                          {/* Chat Background */}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setIsProfileMenuOpen(false);
+                              setChatBgError(null);
+                              setShowChatBgModal(true);
+                            }}
+                            className="w-full text-left px-3 py-2.5 text-xs font-semibold text-slate-200 hover:bg-white/[0.04] rounded-xl transition-all flex items-center gap-3 cursor-pointer"
+                          >
+                            <Palette className="w-4 h-4 text-sky-400 shrink-0" />
+                            <span>Chat background</span>
+                          </button>
 
-                        {/* Wallet Option */}
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setProfileMenuView('wallet');
-                          }}
-                          className="w-full text-left px-3.5 py-2.5 text-xs text-slate-200 hover:bg-slate-800/40 hover:text-white transition-colors flex items-center justify-between cursor-pointer"
-                        >
-                          <div className="flex items-center gap-2">
-                            <CreditCard className="w-3.5 h-3.5 text-slate-400" />
-                            <span>Wallet</span>
-                          </div>
-                          <span className="text-[10px] text-slate-400">Coins/Rubies</span>
-                        </button>
+                          {/* Level info */}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setProfileMenuView('level');
+                            }}
+                            className="w-full text-left px-3 py-2.5 text-xs font-semibold text-slate-200 hover:bg-white/[0.04] rounded-xl transition-all flex items-center gap-3 cursor-pointer"
+                          >
+                            <Layers className="w-4 h-4 text-sky-400 shrink-0" />
+                            <span>Level info</span>
+                          </button>
 
-                        {/* Chat Background Option */}
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setIsProfileMenuOpen(false);
-                            setChatBgError(null);
-                            setShowChatBgModal(true);
-                          }}
-                          className="w-full text-left px-3.5 py-2.5 text-xs text-slate-200 hover:bg-slate-800/40 hover:text-white transition-colors flex items-center gap-2 cursor-pointer"
-                        >
-                          <Palette className="w-3.5 h-3.5 text-slate-400" />
-                          <span>Chat Background</span>
-                        </button>
+                          {/* Wallet */}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setProfileMenuView('wallet');
+                            }}
+                            className="w-full text-left px-3 py-2.5 text-xs font-semibold text-slate-200 hover:bg-white/[0.04] rounded-xl transition-all flex items-center justify-between cursor-pointer"
+                          >
+                            <div className="flex items-center gap-3">
+                              <CreditCard className="w-4 h-4 text-sky-400 shrink-0" />
+                              <span>Wallet</span>
+                            </div>
+                            <ChevronRight className="w-4 h-4 text-slate-500" />
+                          </button>
 
-                        {/* Logout Option */}
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setIsProfileMenuOpen(false);
-                            onLogout();
-                          }}
-                          className="w-full text-left px-3.5 py-2.5 text-xs text-rose-400 hover:bg-rose-950/20 hover:text-rose-200 transition-colors flex items-center gap-2 border-t border-white/5 cursor-pointer relative z-50"
-                        >
-                          <LogOut className="w-3.5 h-3.5" />
-                          Logout
-                        </button>
+                          {/* Edit profile */}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setIsProfileMenuOpen(false);
+                              handleProfileClick(user, "edit");
+                            }}
+                            className="w-full text-left px-3 py-2.5 text-xs font-semibold text-slate-200 hover:bg-white/[0.04] rounded-xl transition-all flex items-center gap-3 cursor-pointer"
+                          >
+                            <User className="w-4 h-4 text-sky-400 shrink-0" />
+                            <span>Edit profile</span>
+                          </button>
+
+                          {/* Logout */}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setIsProfileMenuOpen(false);
+                              onLogout();
+                            }}
+                            className="w-full text-left px-3 py-2.5 text-xs font-semibold text-rose-400 hover:bg-rose-950/25 rounded-xl transition-all flex items-center gap-3 cursor-pointer"
+                          >
+                            <LogOut className="w-4 h-4 text-rose-400 shrink-0" />
+                            <span>Logout</span>
+                          </button>
+                        </div>
                       </>
                     )}
 
@@ -3150,65 +3244,121 @@ export default function ChatRoom({ user, onLogout, onUpdateUser }: ChatRoomProps
                               e.stopPropagation();
                               setProfileMenuView('default');
                             }}
-                            className="w-full px-3.5 py-2 border-b border-white/5 text-left text-xs font-bold text-slate-400 hover:text-white flex items-center gap-1.5 transition-colors cursor-pointer"
+                            className="w-full pb-3 mb-3 border-b border-white/[0.08] text-left text-xs font-black text-slate-400 hover:text-white flex items-center gap-1.5 transition-colors cursor-pointer"
                           >
-                            <ChevronLeft className="w-3.5 h-3.5" />
+                            <ChevronLeft className="w-4 h-4 text-slate-400" />
                             <span>Status</span>
                           </button>
                           
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleUpdateStatus('online');
-                              setIsProfileMenuOpen(false);
-                            }}
-                            className="w-full text-left px-3.5 py-2.5 text-xs text-slate-200 hover:bg-slate-800/40 hover:text-white transition-colors flex items-center gap-2.5 cursor-pointer"
-                          >
-                            <img src="https://drawspace.online/default_images/status/online.svg" className="w-4 h-4 object-contain shrink-0" alt="Online" referrerPolicy="no-referrer" />
-                            <span className={user.custom_status === 'online' || !user.custom_status ? "font-bold text-white" : ""}>Online</span>
-                            {(user.custom_status === 'online' || !user.custom_status) && <Check className="w-3.5 h-3.5 ml-auto text-slate-400" />}
-                          </button>
-
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleUpdateStatus('away');
-                              setIsProfileMenuOpen(false);
-                            }}
-                            className="w-full text-left px-3.5 py-2.5 text-xs text-slate-200 hover:bg-slate-800/40 hover:text-white transition-colors flex items-center gap-2.5 cursor-pointer"
-                          >
-                            <img src="https://drawspace.online/default_images/status/away.svg" className="w-4 h-4 object-contain shrink-0" alt="Away" referrerPolicy="no-referrer" />
-                            <span className={user.custom_status === 'away' ? "font-bold text-white" : ""}>Away</span>
-                            {user.custom_status === 'away' && <Check className="w-3.5 h-3.5 ml-auto text-slate-400" />}
-                          </button>
-
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleUpdateStatus('busy');
-                              setIsProfileMenuOpen(false);
-                            }}
-                            className="w-full text-left px-3.5 py-2.5 text-xs text-slate-200 hover:bg-slate-800/40 hover:text-white transition-colors flex items-center gap-2.5 cursor-pointer"
-                          >
-                            <img src="https://drawspace.online/default_images/status/busy.svg" className="w-4 h-4 object-contain shrink-0" alt="Busy" referrerPolicy="no-referrer" />
-                            <span className={user.custom_status === 'busy' ? "font-bold text-white" : ""}>Busy</span>
-                            {user.custom_status === 'busy' && <Check className="w-3.5 h-3.5 ml-auto text-slate-400" />}
-                          </button>
-
-                          {isFounderAndAbove && (
+                          <div className="space-y-1">
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                handleUpdateStatus('invisible');
+                                handleUpdateStatus('online');
                                 setIsProfileMenuOpen(false);
                               }}
-                              className="w-full text-left px-3.5 py-2.5 text-xs text-slate-200 hover:bg-slate-800/40 hover:text-white transition-colors flex items-center gap-2.5 cursor-pointer"
+                              className="w-full text-left px-3 py-2.5 text-xs font-bold text-slate-200 hover:bg-white/[0.04] rounded-xl transition-colors flex items-center gap-3 cursor-pointer"
                             >
-                              <span className="w-4 h-4 rounded-full bg-[#52525b] border border-zinc-700 flex-shrink-0" />
-                              <span className={user.custom_status === 'invisible' ? "font-bold text-white" : ""}>Invisible</span>
-                              {user.custom_status === 'invisible' && <Check className="w-3.5 h-3.5 ml-auto text-slate-400" />}
+                              <img src="https://drawspace.online/default_images/status/online.svg" className="w-5 h-5 object-contain shrink-0" alt="Online" referrerPolicy="no-referrer" />
+                              <span className={user.custom_status === 'online' || !user.custom_status ? "text-white font-black" : ""}>Online</span>
+                              {(user.custom_status === 'online' || !user.custom_status) && <Check className="w-4 h-4 ml-auto text-sky-400" />}
                             </button>
-                          )}
+
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleUpdateStatus('away');
+                                setIsProfileMenuOpen(false);
+                              }}
+                              className="w-full text-left px-3 py-2.5 text-xs font-bold text-slate-200 hover:bg-white/[0.04] rounded-xl transition-colors flex items-center gap-3 cursor-pointer"
+                            >
+                              <img src="https://drawspace.online/default_images/status/away.svg" className="w-5 h-5 object-contain shrink-0" alt="Away" referrerPolicy="no-referrer" />
+                              <span className={user.custom_status === 'away' ? "text-white font-black" : ""}>Away</span>
+                              {user.custom_status === 'away' && <Check className="w-4 h-4 ml-auto text-sky-400" />}
+                            </button>
+
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleUpdateStatus('busy');
+                                setIsProfileMenuOpen(false);
+                              }}
+                              className="w-full text-left px-3 py-2.5 text-xs font-bold text-slate-200 hover:bg-white/[0.04] rounded-xl transition-colors flex items-center gap-3 cursor-pointer"
+                            >
+                              <img src="https://drawspace.online/default_images/status/busy.svg" className="w-5 h-5 object-contain shrink-0" alt="Busy" referrerPolicy="no-referrer" />
+                              <span className={user.custom_status === 'busy' ? "text-white font-black" : ""}>Busy</span>
+                              {user.custom_status === 'busy' && <Check className="w-4 h-4 ml-auto text-sky-400" />}
+                            </button>
+
+                            {isFounderAndAbove && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleUpdateStatus('invisible');
+                                  setIsProfileMenuOpen(false);
+                                }}
+                                className="w-full text-left px-3 py-2.5 text-xs font-bold text-slate-200 hover:bg-white/[0.04] rounded-xl transition-colors flex items-center gap-3 cursor-pointer"
+                              >
+                                <span className="w-5 h-5 rounded-full bg-[#52525b] border border-zinc-700 flex-shrink-0" />
+                                <span className={user.custom_status === 'invisible' ? "text-white font-black" : ""}>Invisible</span>
+                                {user.custom_status === 'invisible' && <Check className="w-4 h-4 ml-auto text-sky-400" />}
+                              </button>
+                            )}
+                          </div>
+                        </>
+                      );
+                    })()}
+
+                    {profileMenuView === 'level' && (() => {
+                      const { level, xpInCurrentLevel, xpNeededForNextLevel, progress, remainingXp } = getLevelFromXp(user.total_xp || 0);
+                      return (
+                        <>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setProfileMenuView('default');
+                            }}
+                            className="w-full pb-3 mb-3 border-b border-white/[0.08] text-left text-xs font-black text-slate-400 hover:text-white flex items-center gap-1.5 transition-colors cursor-pointer"
+                          >
+                            <ChevronLeft className="w-4 h-4 text-slate-400" />
+                            <span>Level info</span>
+                          </button>
+
+                          <div className="space-y-4 px-1">
+                            <div className="text-center py-2 bg-white/[0.02] border border-white/5 rounded-xl">
+                              <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Current Level</span>
+                              <h3 className="text-2xl font-black text-white mt-1">Level {level}</h3>
+                            </div>
+
+                            <div className="space-y-2">
+                              <div className="flex justify-between text-xs text-slate-400">
+                                <span>Progress</span>
+                                <span className="font-bold text-white">{Math.round(progress)}%</span>
+                              </div>
+                              {/* Progress Bar */}
+                              <div className="w-full h-2.5 bg-slate-800 rounded-full overflow-hidden">
+                                <div 
+                                  className="h-full bg-gradient-to-r from-cyan-400 to-sky-500 rounded-full transition-all duration-300" 
+                                  style={{ width: `${progress}%` }}
+                                />
+                              </div>
+                            </div>
+
+                            <div className="text-xs space-y-1.5 text-slate-400 border-t border-white/[0.04] pt-3">
+                              <div className="flex justify-between">
+                                <span>Current XP:</span>
+                                <span className="font-bold text-slate-200">{xpInCurrentLevel} XP</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span>XP for Level Up:</span>
+                                <span className="font-bold text-slate-200">{xpNeededForNextLevel} XP</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span>XP Remaining:</span>
+                                <span className="font-bold text-sky-400">{remainingXp} XP</span>
+                              </div>
+                            </div>
+                          </div>
                         </>
                       );
                     })()}
@@ -3220,43 +3370,45 @@ export default function ChatRoom({ user, onLogout, onUpdateUser }: ChatRoomProps
                             e.stopPropagation();
                             setProfileMenuView('default');
                           }}
-                          className="w-full px-3.5 py-2 border-b border-white/5 text-left text-xs font-bold text-slate-400 hover:text-white flex items-center gap-1.5 transition-colors cursor-pointer"
+                          className="w-full pb-3 mb-3 border-b border-white/[0.08] text-left text-xs font-black text-slate-400 hover:text-white flex items-center gap-1.5 transition-colors cursor-pointer"
                         >
-                          <ChevronLeft className="w-3.5 h-3.5" />
+                          <ChevronLeft className="w-4 h-4 text-slate-400" />
                           <span>Wallet</span>
                         </button>
                         
-                        <div className="px-3.5 py-3 space-y-3">
-                          {/* Coins / Gold */}
-                          <div className="bg-slate-900/60 border border-white/5 p-2 rounded-lg flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <Coins className="w-4 h-4 text-amber-400" />
-                              <span className="text-xs text-slate-200">Gold Coins</span>
+                        <div className="space-y-4">
+                          {/* Ruby Box */}
+                          <div className="flex flex-col gap-1">
+                            <span className="text-[10px] font-black tracking-wider text-slate-400 uppercase">Ruby</span>
+                            <div className="flex items-center gap-2.5 py-1">
+                              <img src="https://drawspace.online/default_images/icons/ruby.svg" className="w-6 h-6 object-contain" alt="Ruby" referrerPolicy="no-referrer" />
+                              <span className="text-2xl font-black text-white font-mono">
+                                {(user.rubies ?? 10).toLocaleString()}
+                              </span>
                             </div>
-                            <span className="text-xs font-black text-amber-400 font-mono">
-                              {(user.coins ?? 1000).toLocaleString()}
-                            </span>
                           </div>
 
-                          {/* Rubies */}
-                          <div className="bg-slate-900/60 border border-white/5 p-2 rounded-lg flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <Sparkles className="w-4 h-4 text-pink-400 animate-pulse" />
-                              <span className="text-xs text-slate-200">Rubies</span>
+                          <div className="border-b border-white/[0.06] my-2" />
+
+                          {/* Gold Box */}
+                          <div className="flex flex-col gap-1">
+                            <span className="text-[10px] font-black tracking-wider text-slate-400 uppercase">Gold</span>
+                            <div className="flex items-center gap-2.5 py-1">
+                              <img src="https://drawspace.online/default_images/icons/gold.svg" className="w-6 h-6 object-contain" alt="Gold" referrerPolicy="no-referrer" />
+                              <span className="text-2xl font-black text-white font-mono">
+                                {(user.coins ?? 1000).toLocaleString()}
+                              </span>
                             </div>
-                            <span className="text-xs font-black text-pink-400 font-mono">
-                              {(user.rubies ?? 10).toLocaleString()}
-                            </span>
                           </div>
 
-                          {/* Convert Button */}
+                          {/* Exchange Button */}
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
                               setIsProfileMenuOpen(false);
                               setShowConvertModal(true);
                             }}
-                            className="w-full py-2.5 px-3 bg-violet-600 hover:bg-violet-500 text-white font-black text-[10px] uppercase tracking-wider rounded-lg transition-all shadow-md flex items-center justify-center gap-1.5 active:scale-[0.98] cursor-pointer"
+                            className="w-full mt-3 py-2.5 px-3 bg-[#0284c7] hover:bg-[#0369a1] text-white font-black text-[10px] uppercase tracking-wider rounded-xl transition-all shadow-md flex items-center justify-center gap-1.5 active:scale-[0.98] cursor-pointer"
                           >
                             🔄 Exchange Currency
                           </button>
@@ -3498,34 +3650,36 @@ export default function ChatRoom({ user, onLogout, onUpdateUser }: ChatRoomProps
                       )}
                       <div className={`flex-1 min-w-0 flex flex-col justify-center relative z-10 ${(msg.isSystem && !(msg.text && (msg.text.includes("Chat cleared by") || msg.text.includes("cleared by")))) ? "items-center py-2" : ""}`}>
                         {msg.isSystem ? (
-                          (msg.text && (msg.text.includes("Chat cleared by") || msg.text.includes("cleared by"))) ? (
-                            <div className="flex items-center gap-3 py-1 text-sm text-[#8c88a5] font-medium animate-in fade-in duration-200">
-                              <div className="w-8 h-8 rounded-full overflow-hidden shrink-0 shadow-md border border-white/10 bg-slate-800 flex items-center justify-center">
-                                <img 
-                                  src="https://musicvibe.io/default_images/avatar/default_system.png" 
-                                  alt="System Bot" 
-                                  className="w-full h-full object-cover" 
-                                  onError={(e) => {
-                                    (e.target as any).src = "https://api.dicebear.com/7.x/identicon/svg?seed=System";
-                                  }}
-                                />
-                              </div>
-                              <span className="flex items-center gap-1.5 text-slate-300">
-                                This room has been cleared by{" "}
-                                <span 
-                                  onClick={() => {
-                                    const clearedUsername = msg.text.replace(/Chat cleared by:?/i, '').trim();
-                                    const foundUser = computedUsers.find(u => u.username === clearedUsername);
-                                    if (foundUser) handleProfileClick(foundUser);
-                                  }}
-                                  className="text-white font-bold hover:underline cursor-pointer transition-colors"
-                                >
-                                  {msg.text.replace(/Chat cleared by:?/i, '').trim()}
+                          (msg.text && (msg.text.includes("Chat cleared by") || msg.text.includes("cleared by"))) ? (() => {
+                            const clearedUsername = msg.text.replace(/^\[SYSTEM\]\s*Chat cleared by:?\s*/i, '').trim();
+                            return (
+                              <div className="flex items-center gap-3 py-1 text-sm text-[#8c88a5] font-medium animate-in fade-in duration-200">
+                                <div className="w-8 h-8 rounded-full overflow-hidden shrink-0 shadow-md border border-white/10 bg-slate-800 flex items-center justify-center">
+                                  <img 
+                                    src="https://musicvibe.io/default_images/avatar/default_system.png" 
+                                    alt="System Bot" 
+                                    className="w-full h-full object-cover" 
+                                    onError={(e) => {
+                                      (e.target as any).src = "https://api.dicebear.com/7.x/identicon/svg?seed=System";
+                                    }}
+                                  />
+                                </div>
+                                <span className="flex items-center gap-1.5 text-slate-300">
+                                  This room has been cleared by{" "}
+                                  <span 
+                                    onClick={() => {
+                                      const foundUser = computedUsers.find(u => u.username === clearedUsername);
+                                      if (foundUser) handleProfileClick(foundUser);
+                                    }}
+                                    className="text-white font-bold hover:underline cursor-pointer transition-colors"
+                                  >
+                                    {clearedUsername}
+                                  </span>
                                 </span>
-                              </span>
-                              <span className="text-[10px] text-slate-500 font-medium ml-1 shrink-0">{msg.time}</span>
-                            </div>
-                          ) : (
+                                <span className="text-[10px] text-slate-500 font-medium ml-1 shrink-0">{msg.time}</span>
+                              </div>
+                            );
+                          })() : (
                             <div className="bg-[#0a0f1d] border border-white/10 px-5 py-3 rounded-xl shadow-xl max-w-xl w-full flex items-center gap-4">
                               <div className="p-2 rounded-lg bg-violet-600/10 text-violet-400 shrink-0 shadow-inner">
                                 <Bell className="w-5 h-5" />
@@ -3676,9 +3830,7 @@ export default function ChatRoom({ user, onLogout, onUpdateUser }: ChatRoomProps
                     { cmd: '/clear', desc: 'Clear all messages globally', badge: 'Founder+' },
                     { cmd: '/announcement set', desc: 'Set global announcement', badge: 'Dev' },
                     { cmd: '/announcement remove', desc: 'Remove global announcement', badge: 'Dev' },
-                    { cmd: '/notify', desc: 'Send global notification', badge: 'Dev' },
-                    { cmd: '/allin', desc: 'Bet all your Gold or Rubies', badge: 'Gamble' },
-                    { cmd: '/dice', desc: 'Roll a 1-6 dice to win multiplier', badge: 'Gamble' }
+                    { cmd: '/notify', desc: 'Send global notification', badge: 'Dev' }
                   ];
                   const matchingCommands = knownCommandsList.filter(c => c.cmd.startsWith(currentTypedWord));
                   if (matchingCommands.length === 0) return null;
