@@ -437,6 +437,27 @@ export default function ChatRoom({ user, onLogout, onUpdateUser }: ChatRoomProps
 
   // Collaborative Paint, Currency Convert, and Secret Messages States
   const [showPlusOptions, setShowPlusOptions] = useState(false);
+  const [showSoundSettingsModal, setShowSoundSettingsModal] = useState(false);
+  const [chatSoundsEnabled, setChatSoundsEnabled] = useState(() => {
+    const saved = localStorage.getItem("chatSoundsEnabled");
+    return saved !== null ? saved === "true" : true;
+  });
+  const [privateSoundsEnabled, setPrivateSoundsEnabled] = useState(() => {
+    const saved = localStorage.getItem("privateSoundsEnabled");
+    return saved !== null ? saved === "true" : true;
+  });
+  const [notificationSoundsEnabled, setNotificationSoundsEnabled] = useState(() => {
+    const saved = localStorage.getItem("notificationSoundsEnabled");
+    return saved !== null ? saved === "true" : true;
+  });
+  const [tagSoundsEnabled, setTagSoundsEnabled] = useState(() => {
+    const saved = localStorage.getItem("tagSoundsEnabled");
+    return saved !== null ? saved === "true" : true;
+  });
+  const [callSoundsEnabled, setCallSoundsEnabled] = useState(() => {
+    const saved = localStorage.getItem("callSoundsEnabled");
+    return saved !== null ? saved === "true" : true;
+  });
   const [showPaintModal, setShowPaintModal] = useState(false);
   const [showStyleModal, setShowStyleModal] = useState(false);
   const [showConvertModal, setShowConvertModal] = useState(false);
@@ -563,6 +584,24 @@ export default function ChatRoom({ user, onLogout, onUpdateUser }: ChatRoomProps
     // Normalize and map to the specific requested sound files
     let filename = "";
     const lower = src.toLowerCase();
+    
+    // Check individual toggles
+    if (lower.includes('message') || lower.includes('msg')) {
+      if (!chatSoundsEnabled) return;
+    }
+    if (lower.includes('private') || lower.includes('pm')) {
+      if (!privateSoundsEnabled) return;
+    }
+    if (lower.includes('username') || lower.includes('tag')) {
+      if (!tagSoundsEnabled) return;
+    }
+    if (lower.includes('notify') || lower.includes('notif') || lower.includes('news')) {
+      if (!notificationSoundsEnabled) return;
+    }
+    if (lower.includes('action') || lower.includes('ban') || lower.includes('kick') || lower.includes('mute') || lower.includes('username_change') || lower.includes('clear')) {
+      if (!callSoundsEnabled) return;
+    }
+
     if (lower.includes('clear')) filename = "clear.mp3";
     else if (lower.includes('username') || lower.includes('tag')) filename = "username.mp3";
     else if (lower.includes('private') || lower.includes('pm')) filename = "private.mp3";
@@ -2633,7 +2672,7 @@ export default function ChatRoom({ user, onLogout, onUpdateUser }: ChatRoomProps
           <img
             src="/logo.png"
             alt="Purplewave Logo"
-            className="h-9 sm:h-10 object-contain filter brightness-110 saturate-100"
+            className="h-11 sm:h-12 md:h-14 object-contain filter brightness-110 saturate-100 transition-all"
           />
         </div>
 
@@ -2747,16 +2786,6 @@ export default function ChatRoom({ user, onLogout, onUpdateUser }: ChatRoomProps
               {unreadNotifications && (
                 <span className="absolute -top-1 -right-1 w-2 h-2 bg-rose-500 rounded-full animate-pulse border border-[#0f172a]" />
               )}
-            </button>
-
-            {/* Vitro Button next to notifications */}
-            <button
-              onClick={() => setIsVitroModalOpen(true)}
-              className="px-2.5 py-1.5 rounded-lg text-xs font-black bg-gradient-to-r from-pink-500/20 to-rose-500/20 hover:from-pink-500 hover:to-rose-500 text-pink-400 hover:text-white border border-pink-500/30 hover:border-transparent transition-all duration-300 flex items-center gap-1.5 cursor-pointer shadow-lg shadow-pink-500/5 hover:shadow-pink-500/20"
-              title="Vitro Profile Decorations"
-            >
-              <Sparkles className="w-3.5 h-3.5 animate-pulse" />
-              <span>Vitro</span>
             </button>
 
             {/* Mail Button with Interactive Dropdown */}
@@ -2997,27 +3026,6 @@ export default function ChatRoom({ user, onLogout, onUpdateUser }: ChatRoomProps
 
             {/* Admin Panel Button removed as per developer commands migration */}
 
-            <button 
-              onClick={() => {
-                const next = !soundsEnabled;
-                setSoundsEnabled(next);
-                if (next) {
-                  playAudio('/message.mp3');
-                }
-              }}
-              className={`p-1.5 rounded-lg transition-all cursor-pointer ${soundsEnabled ? "text-emerald-400 hover:text-emerald-300 hover:bg-emerald-950/20" : "text-rose-400 hover:text-rose-300 hover:bg-rose-950/20"}`}
-              title={soundsEnabled ? "Mute Sounds (Click to test/mute)" : "Unmute Sounds (Click to unmute/test)"}
-            >
-              {soundsEnabled ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
-            </button>
-
-            <button 
-              onClick={() => setIsOnlinePanelOpen(!isOnlinePanelOpen)}
-              className={`p-1.5 rounded-lg transition-all cursor-pointer ${isOnlinePanelOpen ? "text-purple-300 bg-purple-900/30" : "text-purple-400 hover:text-white hover:bg-purple-950/20"}`}
-              title="Toggle Online Users Panel"
-            >
-              <Users className="w-5 h-5" />
-            </button>
           </div>
 
           {/* User profile with green online status dot */}
@@ -3274,7 +3282,7 @@ export default function ChatRoom({ user, onLogout, onUpdateUser }: ChatRoomProps
             <div className="relative w-72 h-full bg-[#0a0f1d] border-r border-white/5 p-5 flex flex-col animate-in slide-in-from-left duration-250">
               <div className="flex items-center justify-between mb-6 pb-4 border-b border-white/5">
                 <div className="flex items-center gap-2">
-                  <img src="/logo.png" alt="Purplewave Logo" className="h-8 object-contain filter brightness-110 saturate-100" />
+                  <img src="/logo.png" alt="Purplewave Logo" className="h-12 object-contain filter brightness-110 saturate-100 transition-all" />
                 </div>
                 <button
                   onClick={() => setIsSidebarOpen(false)}
@@ -3284,7 +3292,7 @@ export default function ChatRoom({ user, onLogout, onUpdateUser }: ChatRoomProps
                 </button>
               </div>
 
-              <div className="flex-1 space-y-2">
+              <div className="flex-1 space-y-2 overflow-y-auto pr-1">
                 <button
                   onClick={() => { setActiveTab("staff"); setIsSidebarOpen(false); }}
                   className={`w-full text-left py-3 px-4 rounded-xl font-bold flex items-center gap-3 transition-all ${activeTab === "staff" ? "bg-violet-600 text-white shadow-lg shadow-violet-900/20" : "text-slate-300 hover:bg-slate-800/50 hover:text-white"}`}
@@ -3305,6 +3313,34 @@ export default function ChatRoom({ user, onLogout, onUpdateUser }: ChatRoomProps
                 >
                   <Newspaper className="w-5 h-5 shrink-0" />
                   <span>News</span>
+                </button>
+                <button
+                  onClick={() => { setShowSecretMessagesListModal(true); setIsSidebarOpen(false); }}
+                  className="w-full text-left py-3 px-4 rounded-xl font-bold flex items-center gap-3 transition-all text-slate-300 hover:bg-slate-800/50 hover:text-white"
+                >
+                  <Lock className="w-5 h-5 shrink-0" />
+                  <span>Secret Message</span>
+                </button>
+                <button
+                  onClick={() => { setShowProfileVisitorsModal(true); setIsSidebarOpen(false); }}
+                  className="w-full text-left py-3 px-4 rounded-xl font-bold flex items-center gap-3 transition-all text-slate-300 hover:bg-slate-800/50 hover:text-white"
+                >
+                  <Eye className="w-5 h-5 shrink-0" />
+                  <span>Profile Visits</span>
+                </button>
+                <button
+                  onClick={() => { setIsVitroModalOpen(true); setIsSidebarOpen(false); }}
+                  className="w-full text-left py-3 px-4 rounded-xl font-bold flex items-center gap-3 transition-all text-slate-300 hover:bg-slate-800/50 hover:text-white"
+                >
+                  <Sparkles className="w-5 h-5 shrink-0" />
+                  <span>Vitro</span>
+                </button>
+                <button
+                  onClick={() => { setShowSoundSettingsModal(true); setIsSidebarOpen(false); }}
+                  className="w-full text-left py-3 px-4 rounded-xl font-bold flex items-center gap-3 transition-all text-slate-300 hover:bg-slate-800/50 hover:text-white"
+                >
+                  <Volume2 className="w-5 h-5 shrink-0" />
+                  <span>Sound Settings</span>
                 </button>
                 {activeTab !== "chat" && (
                   <button
@@ -3595,17 +3631,9 @@ export default function ChatRoom({ user, onLogout, onUpdateUser }: ChatRoomProps
               </div>
 
               {/* Chat Message Input Container */}
-              <form onSubmit={handleSendMessage} className="p-4 bg-[#0a0f1d] border-t border-white/5 shrink-0 relative">
+              <form onSubmit={handleSendMessage} className="p-4 bg-[#0a0f1d] border-t border-white/5 shrink-0 relative flex items-center gap-2">
                 {showPlusOptions && (
                   <div className="absolute bottom-full left-4 mb-3 p-2 bg-[#1e2124] border border-[#282b30] rounded-xl shadow-2xl flex items-center gap-2 animate-in slide-in-from-bottom-2 duration-200 z-50">
-                    <button
-                      type="button"
-                      onClick={() => { setShowProfileVisitorsModal(true); setShowPlusOptions(false); }}
-                      className="w-10 h-10 rounded-full flex items-center justify-center bg-cyan-500 hover:bg-cyan-600 text-white transition-all cursor-pointer shadow-sm"
-                      title="Profile Visitors"
-                    >
-                      <Eye className="w-5 h-5" />
-                    </button>
                     <button
                       type="button"
                       onClick={() => { setShowPaintModal(true); setShowPlusOptions(false); }}
@@ -3621,14 +3649,6 @@ export default function ChatRoom({ user, onLogout, onUpdateUser }: ChatRoomProps
                       title="Photo Gallery"
                     >
                       <ImageIcon className="w-5 h-5" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => { setShowSecretMessagesListModal(true); setShowPlusOptions(false); }}
-                      className="w-10 h-10 rounded-full flex items-center justify-center bg-emerald-500 hover:bg-emerald-600 text-white transition-all cursor-pointer shadow-sm"
-                      title="Inbox"
-                    >
-                      <Unlock className="w-5 h-5" />
                     </button>
                     <button
                       type="button"
@@ -3753,6 +3773,16 @@ export default function ChatRoom({ user, onLogout, onUpdateUser }: ChatRoomProps
                     </button>
                   </div>
                 </div>
+                {!isOnlinePanelOpen && (
+                  <button
+                    type="button"
+                    onClick={() => setIsOnlinePanelOpen(true)}
+                    className="p-2.5 rounded-xl bg-slate-900 border border-white/10 hover:border-violet-500 text-slate-200 hover:text-white hover:bg-slate-800 transition-all cursor-pointer shadow-lg active:scale-95 flex items-center justify-center shrink-0"
+                    title="Open Players Online"
+                  >
+                    <Menu className="w-4 h-4" />
+                  </button>
+                )}
                 <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleImageUpload} />
               </form>
             </>
@@ -3948,15 +3978,17 @@ export default function ChatRoom({ user, onLogout, onUpdateUser }: ChatRoomProps
                           const hasCustomStyle = isGlowActive || hasCustomBorder;
                           
                           let cardClasses = "p-2 rounded-xl flex items-center justify-between transition-all cursor-pointer border relative overflow-hidden group ";
-                          if (u.isCurrentUser) {
-                            cardClasses += "bg-white/[0.04] border-white/10 shadow-lg shadow-black/15 ";
+                          if (u.nameplate) {
+                            if (u.isCurrentUser) {
+                              cardClasses += "bg-white/[0.04] border-white/10 shadow-lg shadow-black/15 ";
+                            } else {
+                              cardClasses += "bg-white/[0.01] border-white/5 hover:border-white/10 hover:bg-white/[0.03] ";
+                            }
+                            if (hasCustomStyle) {
+                              cardClasses += " " + cardGlow.className;
+                            }
                           } else {
-                            cardClasses += "bg-white/[0.01] border-white/5 hover:border-white/10 hover:bg-white/[0.03] ";
-                          }
-
-                          if (hasCustomStyle) {
-                            // Apply custom class to wrap styles, but maintain basic rounded corners
-                            cardClasses += " " + cardGlow.className;
+                            cardClasses += "bg-transparent border-transparent hover:bg-white/[0.04] hover:border-white/10 hover:shadow-md ";
                           }
 
                           return (
@@ -4044,16 +4076,20 @@ export default function ChatRoom({ user, onLogout, onUpdateUser }: ChatRoomProps
                           const hasCustomStyle = isGlowActive || hasCustomBorder;
                           
                           let cardClasses = "p-2 rounded-xl flex items-center justify-between transition-all cursor-pointer border relative overflow-hidden group ";
-                          if (u.isCurrentUser) {
-                            cardClasses += "bg-white/[0.04] border-white/10 shadow-lg shadow-black/15 ";
+                          if (u.nameplate) {
+                            if (u.isCurrentUser) {
+                              cardClasses += "bg-white/[0.04] border-white/10 shadow-lg shadow-black/15 ";
+                            } else {
+                              cardClasses += "bg-white/[0.01] border-white/5 hover:border-white/10 hover:bg-white/[0.03] ";
+                            }
+                            if (hasCustomStyle) {
+                              cardClasses += " " + cardGlow.className;
+                            }
                           } else {
-                            cardClasses += "bg-white/[0.01] border-white/5 hover:border-white/10 hover:bg-white/[0.03] ";
+                            cardClasses += "bg-transparent border-transparent hover:bg-white/[0.04] hover:border-white/10 hover:shadow-md ";
                           }
-
-                          if (hasCustomStyle) {
-                            // Apply custom class to wrap styles, but maintain basic rounded corners
-                            cardClasses += " " + cardGlow.className;
-                          }
+                          // Add offline grayscale & dim styling
+                          cardClasses += " opacity-45 grayscale hover:opacity-100 hover:grayscale-0 ";
 
                           return (
                             <div
@@ -4157,13 +4193,17 @@ export default function ChatRoom({ user, onLogout, onUpdateUser }: ChatRoomProps
                                     const hasCustomStyle = isGlowActive || hasCustomBorder;
                                     
                                     let cardClasses = "p-2 rounded-xl flex items-center justify-between transition-all cursor-pointer border relative overflow-hidden group ";
-                                    if (u.isCurrentUser) {
-                                      cardClasses += "bg-white/[0.04] border-white/10 shadow-lg shadow-black/15 ";
+                                    if (u.nameplate) {
+                                      if (u.isCurrentUser) {
+                                        cardClasses += "bg-white/[0.04] border-white/10 shadow-lg shadow-black/15 ";
+                                      } else {
+                                        cardClasses += "bg-white/[0.01] border-white/5 hover:border-white/10 hover:bg-white/[0.03] ";
+                                      }
+                                      if (hasCustomStyle) {
+                                        cardClasses += " " + cardGlow.className;
+                                      }
                                     } else {
-                                      cardClasses += "bg-white/[0.01] border-white/5 hover:border-white/10 hover:bg-white/[0.03] ";
-                                    }
-                                    if (hasCustomStyle) {
-                                      cardClasses += " " + cardGlow.className;
+                                      cardClasses += "bg-transparent border-transparent hover:bg-white/[0.04] hover:border-white/10 hover:shadow-md ";
                                     }
                                     return (
                                       <div
@@ -4249,14 +4289,20 @@ export default function ChatRoom({ user, onLogout, onUpdateUser }: ChatRoomProps
                                     const hasCustomStyle = isGlowActive || hasCustomBorder;
                                     
                                     let cardClasses = "p-2 rounded-xl flex items-center justify-between transition-all cursor-pointer border relative overflow-hidden group ";
-                                    if (u.isCurrentUser) {
-                                      cardClasses += "bg-white/[0.04] border-white/10 shadow-lg shadow-black/15 ";
+                                    if (u.nameplate) {
+                                      if (u.isCurrentUser) {
+                                        cardClasses += "bg-white/[0.04] border-white/10 shadow-lg shadow-black/15 ";
+                                      } else {
+                                        cardClasses += "bg-white/[0.01] border-white/5 hover:border-white/10 hover:bg-white/[0.03] ";
+                                      }
+                                      if (hasCustomStyle) {
+                                        cardClasses += " " + cardGlow.className;
+                                      }
                                     } else {
-                                      cardClasses += "bg-white/[0.01] border-white/5 hover:border-white/10 hover:bg-white/[0.03] ";
+                                      cardClasses += "bg-transparent border-transparent hover:bg-white/[0.04] hover:border-white/10 hover:shadow-md ";
                                     }
-                                    if (hasCustomStyle) {
-                                      cardClasses += " " + cardGlow.className;
-                                    }
+                                    // Add offline grayscale & dim styling
+                                    cardClasses += " opacity-45 grayscale hover:opacity-100 hover:grayscale-0 ";
                                     return (
                                       <div
                                         key={u.id}
@@ -4553,6 +4599,154 @@ export default function ChatRoom({ user, onLogout, onUpdateUser }: ChatRoomProps
           onClose={() => setShowStyleModal(false)}
           onUpdate={onUpdateUser}
         />
+      )}
+
+      {/* Sound Settings Modal */}
+      {showSoundSettingsModal && (
+        <div className="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-[#111827] border border-white/10 rounded-2xl w-full max-w-md shadow-2xl p-6 animate-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between pb-4 border-b border-white/10 mb-5">
+              <div className="flex items-center gap-2">
+                <Volume2 className="w-5 h-5 text-violet-400" />
+                <h3 className="text-base font-bold text-white">Sounds</h3>
+              </div>
+              <button 
+                onClick={() => setShowSoundSettingsModal(false)}
+                className="text-slate-400 hover:text-white p-1 hover:bg-white/5 rounded-lg transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {/* Master Mute Option */}
+              <div className="flex items-center justify-between p-3 rounded-xl bg-slate-900/40 border border-white/5">
+                <div>
+                  <span className="text-sm font-bold text-white block">Global Sounds</span>
+                  <span className="text-[10px] text-slate-400">Enable or disable all sounds on the platform</span>
+                </div>
+                <button
+                  onClick={() => {
+                    const next = !soundsEnabled;
+                    setSoundsEnabled(next);
+                  }}
+                  className={`w-11 h-6 rounded-full p-0.5 transition-colors duration-200 cursor-pointer ${soundsEnabled ? 'bg-emerald-500' : 'bg-slate-700'}`}
+                >
+                  <div className={`bg-white w-5 h-5 rounded-full shadow-md transform transition-transform duration-200 ${soundsEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
+                </button>
+              </div>
+
+              {/* Chat Sounds */}
+              <div className="flex items-center justify-between p-3 rounded-xl bg-slate-900/20 border border-white/5">
+                <div>
+                  <span className="text-sm font-bold text-slate-200 block">Chat sounds</span>
+                  <span className="text-[10px] text-slate-400">Play sound when someone types in chat</span>
+                </div>
+                <button
+                  disabled={!soundsEnabled}
+                  onClick={() => {
+                    const next = !chatSoundsEnabled;
+                    setChatSoundsEnabled(next);
+                    localStorage.setItem("chatSoundsEnabled", String(next));
+                    if (next && soundsEnabled) playAudio('/message.mp3');
+                  }}
+                  className={`w-11 h-6 rounded-full p-0.5 transition-colors duration-200 ${!soundsEnabled ? 'opacity-40 cursor-not-allowed bg-slate-800' : 'cursor-pointer'} ${chatSoundsEnabled && soundsEnabled ? 'bg-emerald-500' : 'bg-slate-700'}`}
+                >
+                  <div className={`bg-white w-5 h-5 rounded-full shadow-md transform transition-transform duration-200 ${chatSoundsEnabled && soundsEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
+                </button>
+              </div>
+
+              {/* Private Sounds */}
+              <div className="flex items-center justify-between p-3 rounded-xl bg-slate-900/20 border border-white/5">
+                <div>
+                  <span className="text-sm font-bold text-slate-200 block">Private sounds</span>
+                  <span className="text-[10px] text-slate-400">Play sound when you get a private message</span>
+                </div>
+                <button
+                  disabled={!soundsEnabled}
+                  onClick={() => {
+                    const next = !privateSoundsEnabled;
+                    setPrivateSoundsEnabled(next);
+                    localStorage.setItem("privateSoundsEnabled", String(next));
+                    if (next && soundsEnabled) playAudio('/private.mp3');
+                  }}
+                  className={`w-11 h-6 rounded-full p-0.5 transition-colors duration-200 ${!soundsEnabled ? 'opacity-40 cursor-not-allowed bg-slate-800' : 'cursor-pointer'} ${privateSoundsEnabled && soundsEnabled ? 'bg-emerald-500' : 'bg-slate-700'}`}
+                >
+                  <div className={`bg-white w-5 h-5 rounded-full shadow-md transform transition-transform duration-200 ${privateSoundsEnabled && soundsEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
+                </button>
+              </div>
+
+              {/* Notification Sounds */}
+              <div className="flex items-center justify-between p-3 rounded-xl bg-slate-900/20 border border-white/5">
+                <div>
+                  <span className="text-sm font-bold text-slate-200 block">Notification sounds</span>
+                  <span className="text-[10px] text-slate-400">Play sound when a notification or news is received</span>
+                </div>
+                <button
+                  disabled={!soundsEnabled}
+                  onClick={() => {
+                    const next = !notificationSoundsEnabled;
+                    setNotificationSoundsEnabled(next);
+                    localStorage.setItem("notificationSoundsEnabled", String(next));
+                    if (next && soundsEnabled) playAudio('/notify.mp3');
+                  }}
+                  className={`w-11 h-6 rounded-full p-0.5 transition-colors duration-200 ${!soundsEnabled ? 'opacity-40 cursor-not-allowed bg-slate-800' : 'cursor-pointer'} ${notificationSoundsEnabled && soundsEnabled ? 'bg-emerald-500' : 'bg-slate-700'}`}
+                >
+                  <div className={`bg-white w-5 h-5 rounded-full shadow-md transform transition-transform duration-200 ${notificationSoundsEnabled && soundsEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
+                </button>
+              </div>
+
+              {/* Username Tag Sounds */}
+              <div className="flex items-center justify-between p-3 rounded-xl bg-slate-900/20 border border-white/5">
+                <div>
+                  <span className="text-sm font-bold text-slate-200 block">Username sounds</span>
+                  <span className="text-[10px] text-slate-400">Play sound when you get tagged by someone</span>
+                </div>
+                <button
+                  disabled={!soundsEnabled}
+                  onClick={() => {
+                    const next = !tagSoundsEnabled;
+                    setTagSoundsEnabled(next);
+                    localStorage.setItem("tagSoundsEnabled", String(next));
+                    if (next && soundsEnabled) playAudio('/username.mp3');
+                  }}
+                  className={`w-11 h-6 rounded-full p-0.5 transition-colors duration-200 ${!soundsEnabled ? 'opacity-40 cursor-not-allowed bg-slate-800' : 'cursor-pointer'} ${tagSoundsEnabled && soundsEnabled ? 'bg-emerald-500' : 'bg-slate-700'}`}
+                >
+                  <div className={`bg-white w-5 h-5 rounded-full shadow-md transform transition-transform duration-200 ${tagSoundsEnabled && soundsEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
+                </button>
+              </div>
+
+              {/* Call Sounds / Action Sounds */}
+              <div className="flex items-center justify-between p-3 rounded-xl bg-slate-900/20 border border-white/5">
+                <div>
+                  <span className="text-sm font-bold text-slate-200 block">Call sounds</span>
+                  <span className="text-[10px] text-slate-400">Play action sound on mutes, kicks, bans, or clears</span>
+                </div>
+                <button
+                  disabled={!soundsEnabled}
+                  onClick={() => {
+                    const next = !callSoundsEnabled;
+                    setCallSoundsEnabled(next);
+                    localStorage.setItem("callSoundsEnabled", String(next));
+                    if (next && soundsEnabled) playAudio('/action.mp3');
+                  }}
+                  className={`w-11 h-6 rounded-full p-0.5 transition-colors duration-200 ${!soundsEnabled ? 'opacity-40 cursor-not-allowed bg-slate-800' : 'cursor-pointer'} ${callSoundsEnabled && soundsEnabled ? 'bg-emerald-500' : 'bg-slate-700'}`}
+                >
+                  <div className={`bg-white w-5 h-5 rounded-full shadow-md transform transition-transform duration-200 ${callSoundsEnabled && soundsEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-6">
+              <button
+                onClick={() => setShowSoundSettingsModal(false)}
+                className="w-full py-2.5 bg-violet-600 hover:bg-violet-500 active:scale-[0.98] transition-all text-white font-bold text-sm rounded-xl cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Convert Modal */}
